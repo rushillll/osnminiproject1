@@ -4,6 +4,7 @@
 #include <pwd.h>
 #include "prompt.h"
 #include "lexer.h"
+#include "parser.h"
 
 int main(void)
 {
@@ -25,13 +26,12 @@ int main(void)
 
         Operator* tokens = lexing(input);
 
-        if (lex_error)
+        if (lex_error || !is_valid(tokens))
         {
             printf("cshell: invalid syntax\n");
+            free_tokens(tokens);
             continue;
         }
-
-        if (tokens == NULL) continue;
 
         free_tokens(tokens);
     }
