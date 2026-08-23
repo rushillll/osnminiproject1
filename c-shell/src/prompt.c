@@ -15,14 +15,14 @@ void display_prompt(char *username, char *hostname, char *homedirectory)
 
     if (strncmp(currentdirectory, homedirectory, home_directory_length) == 0 &&
         (currentdirectory[home_directory_length] == '/' ||
-         currentdirectory[home_directory_length] == '\0'))
+        currentdirectory[home_directory_length] == '\0'))
     {
         char *remaining = currentdirectory + home_directory_length; // pointer arithmetic, comparing current path to home dir
-        snprintf(prompt, sizeof(prompt), "<%s@%s:~%s>", username, hostname, remaining);
+        snprintf(prompt, sizeof(prompt), "<%s@%s:~%s> ", username, hostname, remaining);
     }
     else
     {
-        snprintf(prompt, sizeof(prompt), "<%s@%s:%s>", username, hostname, currentdirectory);
+        snprintf(prompt, sizeof(prompt), "<%s@%s:%s> ", username, hostname, currentdirectory);
     }
 
     printf("%s", prompt);
