@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <limits.h>
+#include <string.h>
 #include <pwd.h>
 #include "prompt.h"
 #include "lexer.h"
@@ -23,6 +24,11 @@ int main(void)
         display_prompt(username, hostname, homedirectory); // user prompt that has the username and hostname x@y
         char input[1025];         
         fgets(input, sizeof(input), stdin);
+
+        if (fgets(input, sizeof(input), stdin) == NULL) break;
+
+        int len = strlen(input);
+        if (len > 0 && input[len - 1] == '\n') input[len - 1] = '\0';
 
         Operator* tokens = lexing(input);
 
