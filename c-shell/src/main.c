@@ -10,6 +10,8 @@
 #include "hop.h"
 #include "reveal.h"
 #include "locate.h"
+#include "executor.h"
+#include "peek.h"
 
 
 char** extract_argv(Operator* tokens)
@@ -87,7 +89,16 @@ int main(void)
         {
             locate_command(argv + 1);
         }
+        else if (argv[0] != NULL && strcmp(argv[0], "peek") == 0)
+        {
+            peek_command(argv + 1);
+        }
+        else if (argv[0] != NULL)
+        {
+            execute_command(argv);
+        }
         
+
         free_argv(argv);
     }
 
