@@ -21,7 +21,7 @@ static int is_executable(const char* path)
 }
 
 
-static char* resolve_command_path(const char* token)
+char* find_executable(const char* token)
 {
 
     if (strchr(token, '/') != NULL)
@@ -88,16 +88,19 @@ static char* resolve_command_path(const char* token)
     return NULL;
 }
 
-void execute_command(char** argv)
+void execute_command(char** argv, int input_fd, int output_fd)
 {
-    char* path = resolve_command_path(argv[0]);
+    char* path = find_executable(argv[0]);
 
     if (path == NULL)
     {
-        // Error message never includes the '%' prefix, since that's a
-        // shell-level instruction, not part of the command's name.
-        const char* display = (argv[0][0] == '%') ? argv[0] + 1 : argv[0];
+        const char* display = argv[0];
+        if (argv[0][0] == '%') display = argv[0] + 1;
+
         printf("cshell: command not found (%s)\n", display);
+
+        if (input_fd >= 0) close(input_fd);
+        if (output_fd >= 0) close(output_fd);
         return;
     }
 
@@ -105,25 +108,38 @@ void execute_command(char** argv)
 
     if (pid == 0)
     {
-        // Child: present argv[0] without the '%' prefix too, so the
-        // program sees the name it was actually invoked as.
-        if (argv[0][0] == '%')
-            argv[0] = argv[0] + 1;
+        if (input_fd >= 0)
+        {
+            dup2(input_fd, STDIN_FILENO);
+            close(input_fd);
+        }
+
+        if (output_fd >= 0)
+        {
+            dup2(output_fd, STDOUT_FILENO);
+            close(output_fd);
+        }
+
+        if (argv[0][0] == '%') argv[0] = argv[0] + 1;
 
         execv(path, argv);
 
-        // Only reached if execv itself failed (e.g. bad interpreter).
         perror("cshell");
         exit(127);
     }
     else if (pid > 0)
     {
+        if (input_fd >= 0) close(input_fd);
+        if (output_fd >= 0) close(output_fd);
+
         int status;
         waitpid(pid, &status, 0);
     }
     else
     {
         perror("cshell: fork");
+        if (input_fd >= 0) close(input_fd);
+        if (output_fd >= 0) close(output_fd);
     }
 
     free(path);

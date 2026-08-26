@@ -31,6 +31,7 @@ static int parse_args(char** args, int* a_flag, int* t_flag, char** positional)
 
         if (token[0] == '-' && token[1] != '\0')
         {
+            if (*positional != NULL) return 0; // flags must come before the path
             if (!parse_flag_token(token, a_flag, t_flag)) return 0; // invalid flag character
         }
         else
@@ -135,6 +136,14 @@ static void free_names(char** names, int count)
 }
 
 
+// ls quotes a listed entry in single quotes when its display text contains a space.
+static void print_line(const char* text)
+{
+    if (strchr(text, ' ') != NULL) printf("'%s'\n", text);
+    else printf("%s\n", text);
+}
+
+
 static void reveal_recursive(const char* dir_path, const char* prefix, int a_flag)
 {
     char** names;
@@ -148,10 +157,15 @@ static void reveal_recursive(const char* dir_path, const char* prefix, int a_fla
         char display[PATH_MAX + 512];
         snprintf(display, sizeof(display), "%s%s", prefix, names[i]);
 
+        struct stat link_st;
+        int is_symlink = (lstat(full_path, &link_st) == 0 && S_ISLNK(link_st.st_mode));
+
         struct stat st;
-        if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode))
+        if (!is_symlink && stat(full_path, &st) == 0 && S_ISDIR(st.st_mode))
         {
-            printf("%s/\n", display);
+            char display_with_slash[PATH_MAX + 513];
+            snprintf(display_with_slash, sizeof(display_with_slash), "%s/", display);
+            print_line(display_with_slash);
 
             char next_prefix[PATH_MAX + 1024];
             snprintf(next_prefix, sizeof(next_prefix), "%s/", display);
@@ -159,7 +173,9 @@ static void reveal_recursive(const char* dir_path, const char* prefix, int a_fla
         }
         else
         {
-            printf("%s\n", display);
+            // Symlinks (even ones pointing at directories) are listed as a
+            // single leaf entry; their targets are never recursed into.
+            print_line(display);
         }
     }
 
@@ -201,7 +217,7 @@ void reveal_command(char** args, const char* home, char* previous_cwd)
         char** names;
         int count = list_entries(target, a_flag, &names);
         for (int i = 0; i < count; i++)
-            printf("%s\n", names[i]);
+            print_line(names[i]);
         free_names(names, count);
     }
 }

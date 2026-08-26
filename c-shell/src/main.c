@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <sys/wait.h>
 #include <pwd.h>
 #include "prompt.h"
 #include "lexer.h"
@@ -12,45 +13,21 @@
 #include "locate.h"
 #include "executor.h"
 #include "peek.h"
+#include "command.h"
+#include "redirect.h"
+#include "pipeline.h"
 
-
-char** extract_argv(Operator* tokens)
-{
-    int count = 0;
-    for (Operator* t = tokens; t != NULL && t->type == Word; t = t->next) count++;
-
-    char** argv = malloc((count + 1) * sizeof(char*));
-
-    int i = 0;
-
-    for (Operator* t = tokens; t != NULL && t->type == Word; t = t->next)
-    {
-        int len = strlen(t->value) + 1;
-        argv[i] = malloc(len);
-        memcpy(argv[i], t->value, len);
-        i++;
-    }
-    argv[count] = NULL;
-    return argv;
-}
-
-void free_argv(char** argv)
-{
-    for (int i = 0; argv[i] != NULL; i++) free(argv[i]);
-    free(argv);
-}
 
 int main(void)
 {
     char hostname[100];
     char homedirectory[PATH_MAX];
-    char* previous_cwd = NULL; // like OLDPWD; NULL until the first hop
+    char* previous_cwd = NULL;
 
     struct passwd *uid_pw = getpwuid(getuid());
     char *username = uid_pw->pw_name;
 
     gethostname(hostname, sizeof(hostname));
-
     getcwd(homedirectory, sizeof(homedirectory));
 
     while (1)
@@ -72,34 +49,88 @@ int main(void)
             continue;
         }
 
-        if (tokens == NULL) continue; 
+        if (tokens == NULL) continue;
 
-        char** argv = extract_argv(tokens);
+        Pipeline pipeline = extract_pipeline(tokens);
         free_tokens(tokens);
 
-        if (argv[0] != NULL && strcmp(argv[0], "hop") == 0)
+        if (pipeline.count == 1)
         {
-            hop_command(argv + 1, homedirectory, &previous_cwd);
-        }
-        else if (argv[0] != NULL && strcmp(argv[0], "reveal") == 0)
-        {
-            reveal_command(argv + 1, homedirectory, previous_cwd);
-        }
-        else if (argv[0] != NULL && strcmp(argv[0], "locate") == 0)
-        {
-            locate_command(argv + 1);
-        }
-        else if (argv[0] != NULL && strcmp(argv[0], "peek") == 0)
-        {
-            peek_command(argv + 1);
-        }
-        else if (argv[0] != NULL)
-        {
-            execute_command(argv);
-        }
-        
+            ParsedCommand* command = &pipeline.stages[0];
+            char** argv = command->argv;
 
-        free_argv(argv);
+            int input_fd = -1;
+            if (command->infiles[0] != NULL)
+            {
+                input_fd = open_input_stream(command->infiles);
+                if (input_fd < 0)
+                {
+                    free_pipeline(&pipeline);
+                    continue;
+                }
+            }
+
+            int output_fd = -1;
+            pid_t output_sink_pid = -1;
+            if (command->outfiles[0].filename != NULL)
+            {
+                OutputStream output_stream = open_output_stream(command->outfiles);
+                if (output_stream.fd < 0)
+                {
+                    if (input_fd >= 0) close(input_fd);
+                    free_pipeline(&pipeline);
+                    continue;
+                }
+                output_fd = output_stream.fd;
+                output_sink_pid = output_stream.sink_pid;
+            }
+
+            if (argv[0] != NULL && strcmp(argv[0], "hop") == 0)
+            {
+                int saved_stdin, saved_stdout;
+                begin_stdio_redirect(input_fd, output_fd, &saved_stdin, &saved_stdout);
+                hop_command(argv + 1, homedirectory, &previous_cwd);
+                end_stdio_redirect(saved_stdin, saved_stdout);
+            }
+            else if (argv[0] != NULL && strcmp(argv[0], "reveal") == 0)
+            {
+                int saved_stdin, saved_stdout;
+                begin_stdio_redirect(input_fd, output_fd, &saved_stdin, &saved_stdout);
+                reveal_command(argv + 1, homedirectory, previous_cwd);
+                end_stdio_redirect(saved_stdin, saved_stdout);
+            }
+            else if (argv[0] != NULL && strcmp(argv[0], "locate") == 0)
+            {
+                int saved_stdin, saved_stdout;
+                begin_stdio_redirect(input_fd, output_fd, &saved_stdin, &saved_stdout);
+                locate_command(argv + 1);
+                end_stdio_redirect(saved_stdin, saved_stdout);
+            }
+            else if (argv[0] != NULL && strcmp(argv[0], "peek") == 0)
+            {
+                int saved_stdin, saved_stdout;
+                begin_stdio_redirect(input_fd, output_fd, &saved_stdin, &saved_stdout);
+                peek_command(argv + 1);
+                end_stdio_redirect(saved_stdin, saved_stdout);
+            }
+            else if (argv[0] != NULL)
+            {
+                execute_command(argv, input_fd, output_fd);
+            }
+            else
+            {
+                if (input_fd >= 0) close(input_fd);
+                if (output_fd >= 0) close(output_fd);
+            }
+
+            if (output_sink_pid > 0) waitpid(output_sink_pid, NULL, 0);
+        }
+        else
+        {
+            run_pipeline(&pipeline, homedirectory, &previous_cwd);
+        }
+
+        free_pipeline(&pipeline);
     }
 
     free(previous_cwd);

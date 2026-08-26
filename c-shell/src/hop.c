@@ -26,40 +26,60 @@ static int do_chdir(const char* target, char** previous_cwd)
     return 0;
 }
 
-static void hop_one(const char* arg, const char* home, char** previous_cwd)
+// Returns 1 on success (including no-op cases like "."), 0 on failure.
+// hop_command stops at the first argument that returns 0.
+static int hop_one(const char* arg, const char* home, char** previous_cwd)
 {
     if (arg == NULL || strcmp(arg, "~") == 0)
     {
-        if (do_chdir(home, previous_cwd) != 0) printf("hop: no such directory\n");
-        return;
+        if (do_chdir(home, previous_cwd) != 0)
+        {
+            printf("hop: no such directory\n");
+            return 0;
+        }
+        return 1;
     }
 
-    if (strcmp(arg, ".") == 0) return;
+    if (strcmp(arg, ".") == 0) return 1; // no real hop, no frecency update, not a failure
 
     if (strcmp(arg, "..") == 0)
     {
-        if (do_chdir("..", previous_cwd) != 0) printf("hop: no such directory\n");
-        return;
+        if (do_chdir("..", previous_cwd) != 0)
+        {
+            printf("hop: no such directory\n");
+            return 0;
+        }
+        return 1;
     }
 
     if (strcmp(arg, "-") == 0)
     {
-        if (*previous_cwd == NULL) return; 
-        if (do_chdir(*previous_cwd, previous_cwd) != 0) printf("hop: no such directory\n");
-        return;
+        if (*previous_cwd == NULL) return 1; // nothing to do, not a failure
+        if (do_chdir(*previous_cwd, previous_cwd) != 0)
+        {
+            printf("hop: no such directory\n");
+            return 0;
+        }
+        return 1;
     }
 
-    if (do_chdir(arg, previous_cwd) == 0) return;
+    if (do_chdir(arg, previous_cwd) == 0) return 1;
 
     char* match = frecency_lookup(arg);
     if (match != NULL)
     {
-        do_chdir(match, previous_cwd); 
+        int ok = (do_chdir(match, previous_cwd) == 0);
         free(match);
-        return;
+        if (!ok)
+        {
+            printf("hop: no such directory\n");
+            return 0;
+        }
+        return 1;
     }
 
     printf("hop: no such directory\n");
+    return 0;
 }
 
 void hop_command(char** args, const char* home, char** previous_cwd)
@@ -70,5 +90,8 @@ void hop_command(char** args, const char* home, char** previous_cwd)
         return;
     }
 
-    for (int i = 0; args[i] != NULL; i++) hop_one(args[i], home, previous_cwd);
+    for (int i = 0; args[i] != NULL; i++)
+    {
+        if (!hop_one(args[i], home, previous_cwd)) break;
+    }
 }

@@ -323,7 +323,11 @@ void peek_command(char** args)
 {
     int n_flag, r_flag, file_count;
     char** files;
-    parse_args(args, &n_flag, &r_flag, &files, &file_count);
+    if (!parse_args(args, &n_flag, &r_flag, &files, &file_count))
+    {
+        printf("peek: invalid syntax\n");
+        return;
+    }
 
     int number = 0;
 
