@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "reveal.h"
+#include "pathutil.h"
 
 
 static int parse_flag_token(const char* token, int* a_out, int* t_out)
@@ -76,11 +77,10 @@ static int resolve_target(const char* positional, const char* home, char* previo
         return 1;
     }
 
-    char candidate[PATH_MAX + 1];
-    if (positional[0] == '/') snprintf(candidate, sizeof(candidate), "%s", positional);
-    else snprintf(candidate, sizeof(candidate), "%s/%s", cwd, positional);
-    if (realpath(candidate, out) == NULL) return 0;
-    return 1;
+    char* candidate = join_path(cwd, positional);
+    int ok = (realpath(candidate, out) != NULL);
+    free(candidate);
+    return ok;
 }
 
 

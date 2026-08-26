@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "locate.h"
+#include "pathutil.h"
 
 
 static int is_executable(const char* path)
@@ -29,13 +30,13 @@ static int locate_one(const char* filename)
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != NULL)
     {
-        char candidate[PATH_MAX + 512];
-        snprintf(candidate, sizeof(candidate), "%s/%s", cwd, filename);
+        char* candidate = join_path(cwd, filename);
         if (is_executable(candidate))
         {
             print_absolute(candidate);
             found = 1;
         }
+        free(candidate);
     }
 
     const char* path_env = getenv("PATH");
@@ -48,15 +49,15 @@ static int locate_one(const char* filename)
         char* dir = strtok(path_copy, ":");
         while (dir != NULL)
         {
-            if (dir[0] != '\0') // skip empty PATH entries
+            if (dir[0] != '\0')
             {
-                char candidate[PATH_MAX + 512];
-                snprintf(candidate, sizeof(candidate), "%s/%s", dir, filename);
+                char* candidate = join_path(dir, filename);
                 if (is_executable(candidate))
                 {
                     print_absolute(candidate);
                     found = 1;
                 }
+                free(candidate);
             }
             dir = strtok(NULL, ":");
         }

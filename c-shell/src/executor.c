@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include "executor.h"
+#include "pathutil.h"
 
 
 static int is_executable(const char* path)
@@ -44,15 +45,12 @@ char* find_executable(const char* token)
         char cwd[PATH_MAX];
         if (getcwd(cwd, sizeof(cwd)) != NULL)
         {
-            char candidate[PATH_MAX + 512];
-            snprintf(candidate, sizeof(candidate), "%s/%s", cwd, name);
+            char* candidate = join_path(cwd, name);
             if (is_executable(candidate))
             {
-                int len = strlen(candidate) + 1;
-                char* path = malloc(len);
-                memcpy(path, candidate, len);
-                return path;
+                return candidate;
             }
+            free(candidate);
         }
     }
 
@@ -68,16 +66,13 @@ char* find_executable(const char* token)
         {
             if (dir[0] != '\0')
             {
-                char candidate[PATH_MAX + 512];
-                snprintf(candidate, sizeof(candidate), "%s/%s", dir, name);
+                char* candidate = join_path(dir, name);
                 if (is_executable(candidate))
                 {
-                    int clen = strlen(candidate) + 1;
-                    char* result = malloc(clen);
-                    memcpy(result, candidate, clen);
                     free(path_copy);
-                    return result;
+                    return candidate;
                 }
+                free(candidate);
             }
             dir = strtok(NULL, ":");
         }
